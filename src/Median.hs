@@ -15,9 +15,11 @@ getWindowMedian radius img center_x center_y =
         go start_x start_y idx side
             | idx == side * side = ([], [], [])
             | otherwise =
-                let x = start_x + mod idx side
-                    y = start_y + div idx side
-                    PixelRGB8 r g b = defaultPixelAt (PixelRGB8 0 0 0) img x y
+                let width = imageWidth img
+                    height = imageHeight img
+                    x = adjustIdx width (start_x + mod idx side)
+                    y = adjustIdx height (start_y + div idx side)
+                    PixelRGB8 r g b = pixelAt img x y
                     (rrest, grest, brest) = go start_x start_y (idx + 1) side
                 in (r:rrest, g:grest, b:brest)
 

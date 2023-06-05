@@ -2,6 +2,12 @@ module Utils where
 
 import Codec.Picture
 
+adjustIdx :: Int -> Int -> Int
+adjustIdx max_border idx
+    | idx < 0 = 0
+    | idx >= max_border = max_border - 1
+    | otherwise = idx
+
 defaultPixelAt :: Pixel a => a -> Image a -> Int -> Int -> a
 defaultPixelAt default_px img x y =
     let width = imageWidth img
