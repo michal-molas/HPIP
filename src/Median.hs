@@ -1,4 +1,4 @@
-module MedianBlur where
+module Median where
 
 import Codec.Picture
 import Data.List
@@ -29,8 +29,8 @@ getWindowMedian radius img center_x center_y =
                 mid = 2 * radius * (radius + 1)
             in PixelRGB8 (sorted_rs !! mid) (sorted_gs !! mid) (sorted_bs !! mid)
 
-convolve :: Int -> Image PixelRGB8 -> Image PixelRGB8
-convolve radius img =
+convolute :: Int -> Image PixelRGB8 -> Image PixelRGB8
+convolute radius img =
     let width = imageWidth img
         height = imageHeight img
     in generateImage (getWindowMedian radius img) width height

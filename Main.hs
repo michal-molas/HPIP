@@ -2,8 +2,8 @@ import Codec.Picture
 import System.Environment (getArgs)
 import System.Exit (die)
 
-import qualified GaussianBlur as GB
-import qualified MedianBlur as MB
+import qualified Gaussian as G
+import qualified Median as M
 import Utils
 
 genAndSave :: Image PixelRGB8 -> String -> IO (Image PixelRGB8)
@@ -24,7 +24,7 @@ sharpenGauss dynamic_img = do
     let factor = read factorstr :: Pixel8
 
     original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    blurred <- genAndSave (GB.convolve sigma original) "blurred.png"
+    blurred <- genAndSave (G.convolute sigma original) "blurred.png"
     diff <- genAndSave (subtractImages original blurred) "diff.png"
     enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
     genAndSave_ (addImages original enhanced_diff) "final.png"
@@ -39,7 +39,7 @@ sharpenMedian dynamic_img = do
     let factor = read factorstr :: Pixel8
 
     original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    blurred <- genAndSave (MB.convolve radius original) "blurred.png"
+    blurred <- genAndSave (M.convolute radius original) "blurred.png"
     diff <- genAndSave (subtractImages original blurred) "diff.png"
     enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
     genAndSave_ (addImages original enhanced_diff) "final.png"
