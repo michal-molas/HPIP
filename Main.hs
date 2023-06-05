@@ -69,12 +69,12 @@ copyPixelFromSubImgs :: Pixel a => Int -> Int -> Int -> [Image a] -> Int -> Int 
 copyPixelFromSubImgs sub_width sub_height side_length sub_imgs x y =
     let cropped_width = side_length * sub_width
         cropped_height = side_length * sub_height
-
+        -- subimages in last row/colum have extra pixels
         img_row = div x sub_width - if x >= cropped_width then 1 else 0
         img_col = div y sub_height - if y >= cropped_height then 1 else 0
         img_idx = img_col * side_length + img_row
-        relative_x = mod x sub_width
-        relative_y = mod y sub_height
+        relative_x = mod x sub_width + if x >= cropped_width then sub_width else 0
+        relative_y = mod y sub_height + if y >= cropped_height then sub_height else 0
     in pixelAt (sub_imgs !! img_idx) relative_x relative_y
 
 concatImages :: Pixel a => Int -> Int -> Int -> [Image a] -> Image a
