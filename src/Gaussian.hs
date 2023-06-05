@@ -1,4 +1,4 @@
-module GaussianBlur where
+module Gaussian where
 
 import Codec.Picture
 import Utils
@@ -19,37 +19,37 @@ gaussianKernel sigma =
                     coefficient = 1 / (sigma * sqrt (2 * pi))
                 in ((coefficient * exp expo):go (idx + 1) size)
 
-convolveHorizontalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
-convolveHorizontalHelp [] _ _ _ = (0.0, 0.0, 0.0)
-convolveHorizontalHelp (a:gauss) img x y =
+convoluteHorizontalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
+convoluteHorizontalHelp [] _ _ _ = (0.0, 0.0, 0.0)
+convoluteHorizontalHelp (a:gauss) img x y =
     let PixelRGB8 r g b = defaultPixelAt (PixelRGB8 0 0 0) img x y
-        (r', g', b') = convolveHorizontalHelp gauss img (x + 1) y
+        (r', g', b') = convoluteHorizontalHelp gauss img (x + 1) y
     in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
 
-convolveHorizontal :: Int -> [Double] -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
-convolveHorizontal gauss_size gauss img x y =
+convoluteHorizontal :: Int -> [Double] -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
+convoluteHorizontal gauss_size gauss img x y =
     let center = div (gauss_size - 1) 2
-        (r, g, b) = convolveHorizontalHelp gauss img (x - center) y
+        (r, g, b) = convoluteHorizontalHelp gauss img (x - center) y
     in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
 
-convolveVerticalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
-convolveVerticalHelp [] _ _ _ = (0.0, 0.0, 0.0)
-convolveVerticalHelp (a:gauss) img x y =
+convoluteVerticalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
+convoluteVerticalHelp [] _ _ _ = (0.0, 0.0, 0.0)
+convoluteVerticalHelp (a:gauss) img x y =
     let PixelRGB8 r g b = defaultPixelAt (PixelRGB8 0 0 0) img x y
-        (r', g', b') = convolveVerticalHelp gauss img x (y + 1)
+        (r', g', b') = convoluteVerticalHelp gauss img x (y + 1)
     in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
 
-convolveVertical :: Int -> [Double] -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
-convolveVertical gauss_size gauss img x y =
+convoluteVertical :: Int -> [Double] -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
+convoluteVertical gauss_size gauss img x y =
     let center = div (gauss_size - 1) 2
-        (r, g, b) = convolveVerticalHelp gauss img x (y - center)
+        (r, g, b) = convoluteVerticalHelp gauss img x (y - center)
     in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
 
-convolve :: Double -> Image PixelRGB8 -> Image PixelRGB8
-convolve sigma img =
+convolute :: Double -> Image PixelRGB8 -> Image PixelRGB8
+convolute sigma img =
     let width = imageWidth img
         height = imageHeight img
         gauss = gaussianKernel sigma
         gauss_size = length gauss
-        horizontal = generateImage (convolveHorizontal gauss_size gauss img) width height
-            in generateImage (convolveVertical gauss_size gauss horizontal) width height
+        horizontal = generateImage (convoluteHorizontal gauss_size gauss img) width height
+            in generateImage (convoluteVertical gauss_size gauss horizontal) width height
