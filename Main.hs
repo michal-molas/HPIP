@@ -47,15 +47,19 @@ sharpenMedian dynamic_img = do
 main :: IO ()
 main = do
     args <- System.Environment.getArgs
-    (path, flag) <- case args of
-            [path_, flag_] -> return (path_, flag_)
-            _ -> die "Usage: ./hpip <path> <flag>"
+    path <- case args of
+            [path_] -> return path_
+            _ -> die "Usage: ./hpip <path>"
 
     either_img <- readImage path
     case either_img of
         Left s -> die s
         Right dynamic_img -> do
+            putStrLn "M — Median filter"
+            putStrLn "G — Gaussian kernel"
+            putStrLn "Choose sharpening method:"
+            flag <- getLine
             case flag of
                 "G" -> sharpenGauss dynamic_img
                 "M" -> sharpenMedian dynamic_img
-                _ -> die "No such option"
+                _ -> die "No such method"
