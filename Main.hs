@@ -25,28 +25,6 @@ getInput name = do
     putStrLn $ "Input " ++ name ++ ":"
     read <$> getLine
 
-sharpenGauss :: DynamicImage -> IO ()
-sharpenGauss dynamic_img = do
-    sigma <- getInput @Double "sigma"
-    factor <- getInput @Pixel8 "enhancement factor"
-
-    original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    blurred <- genAndSave (G.convolute sigma original) "blurred.png"
-    diff <- genAndSave (subtractImages original blurred) "diff.png"
-    enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
-    genAndSave_ (addImages original enhanced_diff) "final.png"
-
-sharpenMedian :: DynamicImage -> IO ()
-sharpenMedian dynamic_img = do
-    radius <- getInput @Int "radius"
-    factor <- getInput @Pixel8 "enhancement factor"
-
-    original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    blurred <- genAndSave (M.convolute radius original) "blurred.png"
-    diff <- genAndSave (subtractImages original blurred) "diff.png"
-    enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
-    genAndSave_ (addImages original enhanced_diff) "final.png"
-
 copyPixel :: Pixel a => Int -> Int -> Image a -> Int -> Int -> a
 copyPixel x_offset y_offset img x y = pixelAt img (x_offset + x) (y_offset + y)
 
@@ -80,27 +58,35 @@ concatImages extra_pixels num_sub (img:imgs) =
         height = num_sub * sub_height + extra_pixels
     in generateImage (copyPixelFromSubImgs sub_height num_sub (img:imgs)) width height
 
-sharpenMedianPar :: DynamicImage -> IO ()
-sharpenMedianPar dynamic_img = do
-    num_threads <- getInput @Int "number of threads"
+gaussianBlur :: Image PixelRGB8 -> IO (Image PixelRGB8)
+gaussianBlur img = do
+    sigma <- getInput @Double "sigma"
 
-    case num_threads of
-        1 -> sharpenMedian dynamic_img
-        _ -> do setNumCapabilities num_threads
-                radius <- getInput @Int "radius"
-                factor <- getInput @Pixel8 "enhancement factor"
+    genAndSave (G.convolute sigma img) "blurred.png"
 
-                original <- genAndSave (convertRGB8 dynamic_img) "original.png"
+medianBlur :: Int -> Image PixelRGB8 -> IO (Image PixelRGB8)
+medianBlur num_threads img = do
+    radius <- getInput @Int "radius"
 
-                let num_sub = num_threads
-                    sub_imgs = runEval $ splitImage original num_sub
-                    sub_blurred = parMap rpar (M.convolute radius) sub_imgs
-                    extra_pixels = mod (imageHeight original) num_sub
+    let blurred = case num_threads of
+            1 -> M.convolute radius img
+            _ -> let sub_imgs = runEval $ splitImage img num_threads
+                     sub_blurred = parMap rpar (M.convolute radius) sub_imgs
+                     extra_pixels = mod (imageHeight img) num_threads
+                 in concatImages extra_pixels num_threads sub_blurred
 
-                blurred <- genAndSave (concatImages extra_pixels num_sub sub_blurred) "blurred.png"
-                diff <- genAndSave (subtractImages original blurred) "diff.png"
-                enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
-                genAndSave_ (addImages original enhanced_diff) "final.png"
+    genAndSave blurred "blurred.png"
+
+sharpen :: DynamicImage -> (Image PixelRGB8 -> IO (Image PixelRGB8)) -> IO ()
+sharpen dynamic_img blur_method = do
+    original <- genAndSave (convertRGB8 dynamic_img) "original.png"
+    blurred <- blur_method original
+    diff <- genAndSave (subtractImages original blurred) "diff.png"
+
+    factor <- getInput @Pixel8 "enhancement factor"
+
+    enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
+    genAndSave_ (addImages original enhanced_diff) "final.png"
 
 main :: IO ()
 main = do
@@ -109,19 +95,20 @@ main = do
             [path_] -> return path_
             _ -> die "Usage: ./hpip <path>"
 
-    -- putStrLn $ "number of cores: " ++ show getNumProcessors
-
     either_img <- readImage path
     case either_img of
         Left s -> die s
         Right dynamic_img -> do
             putStrLn "G — Gaussian kernel"
             putStrLn "M — Median filter"
-            putStrLn "MP — Median filter parallel"
-            putStrLn "Choose sharpening method:"
+            putStrLn "Choose method:"
             flag <- getLine
-            case flag of
-                "G" -> sharpenGauss dynamic_img
-                "M" -> sharpenMedian dynamic_img
-                "MP" -> sharpenMedianPar dynamic_img
+            num_threads <- getInput @Int "number of threads"
+            setNumCapabilities num_threads
+
+            method <- case flag of
+                "G" -> return gaussianBlur
+                "M" -> return $ medianBlur num_threads
                 _ -> die "No such method"
+            
+            sharpen dynamic_img method
