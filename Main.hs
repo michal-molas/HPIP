@@ -1,7 +1,12 @@
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 import Codec.Picture
 import System.Environment (getArgs)
 import System.Exit (die)
 import Control.Parallel.Strategies
+import Control.Concurrent (setNumCapabilities)
+-- import GHC.Conc (getNumProcessors)
 
 import qualified Gaussian as G
 import qualified Median as M
@@ -15,14 +20,15 @@ genAndSave img name = do
 genAndSave_ :: Image PixelRGB8 -> String -> IO ()
 genAndSave_ img name = savePngImage ("images/" ++ name) (ImageRGB8 img)
 
+getInput :: Read a => String -> IO a
+getInput name = do
+    putStrLn $ "Input " ++ name ++ ":"
+    read <$> getLine
+
 sharpenGauss :: DynamicImage -> IO ()
 sharpenGauss dynamic_img = do
-    putStrLn "Input sigma:"
-    sigmastr <- getLine
-    let sigma = read sigmastr :: Double
-    putStrLn "Input enhancement factor:"
-    factorstr <- getLine
-    let factor = read factorstr :: Pixel8
+    sigma <- getInput @Double "sigma"
+    factor <- getInput @Pixel8 "enhancement factor"
 
     original <- genAndSave (convertRGB8 dynamic_img) "original.png"
     blurred <- genAndSave (G.convolute sigma original) "blurred.png"
@@ -32,12 +38,8 @@ sharpenGauss dynamic_img = do
 
 sharpenMedian :: DynamicImage -> IO ()
 sharpenMedian dynamic_img = do
-    putStrLn "Input radius:"
-    radiusstr <- getLine
-    let radius = read radiusstr :: Int
-    putStrLn "Input enhancement factor:"
-    factorstr <- getLine
-    let factor = read factorstr :: Pixel8
+    radius <- getInput @Int "radius"
+    factor <- getInput @Pixel8 "enhancement factor"
 
     original <- genAndSave (convertRGB8 dynamic_img) "original.png"
     blurred <- genAndSave (M.convolute radius original) "blurred.png"
@@ -49,70 +51,56 @@ copyPixel :: Pixel a => Int -> Int -> Image a -> Int -> Int -> a
 copyPixel x_offset y_offset img x y = pixelAt img (x_offset + x) (y_offset + y)
 
 splitImage :: Pixel a => Image a -> Int -> Eval [Image a]
-splitImage img side_length = do
+splitImage img num_sub = do
     let width = imageWidth img
-        sub_img_width = div width side_length
         height = imageHeight img
-        sub_img_height = div height side_length
+        sub_img_height = div height num_sub
         -- this is neccassary for cases when image is not divided correctly
         -- in order to compare it with original later
-        -- im adding extra pixels to subimages in last row/column
-        wpixels = mod width side_length
-        hpixels = mod height side_length
-        cpfoo = \x y -> copyPixel (x * sub_img_width) (y * sub_img_height) img
-        siw = \x -> sub_img_width + (if x == side_length - 1 then wpixels else 0)
-        sih = \y -> sub_img_height + (if y == side_length - 1 then hpixels else 0)
-        generateSubImage x y = generateImage (cpfoo x y) (siw x) (sih y)
-    return $ parMap rpar (uncurry generateSubImage) [(x, y) | y <- [0 .. side_length - 1], x <- [0 .. side_length - 1]]
+        -- im adding extra pixels to subimage in last column
+        extra_pixels = mod height num_sub
+        cpfoo = \sub_idx -> copyPixel 0 (sub_idx * sub_img_height) img
+        sih = \sub_idx -> sub_img_height + (if sub_idx == num_sub - 1 then extra_pixels else 0)
+        generateSubImage = \sub_idx -> generateImage (cpfoo sub_idx) width (sih sub_idx)
+    return $ parMap rpar generateSubImage [sub_idx | sub_idx <- [0 .. num_sub - 1]]
 
-copyPixelFromSubImgs :: Pixel a => Int -> Int -> Int -> [Image a] -> Int -> Int -> a
-copyPixelFromSubImgs sub_width sub_height side_length sub_imgs x y =
-    let cropped_width = side_length * sub_width
-        cropped_height = side_length * sub_height
-        -- subimages in last row/colum have extra pixels
-        img_row = div x sub_width - if x >= cropped_width then 1 else 0
-        img_col = div y sub_height - if y >= cropped_height then 1 else 0
-        img_idx = img_col * side_length + img_row
-        relative_x = mod x sub_width + if x >= cropped_width then sub_width else 0
+copyPixelFromSubImgs :: Pixel a => Int -> Int -> [Image a] -> Int -> Int -> a
+copyPixelFromSubImgs sub_height num_sub sub_imgs x y =
+    let cropped_height = num_sub * sub_height
+        -- subimages in last row have extra pixels
+        img_idx = div y sub_height - if y >= cropped_height then 1 else 0
         relative_y = mod y sub_height + if y >= cropped_height then sub_height else 0
-    in pixelAt (sub_imgs !! img_idx) relative_x relative_y
+    in pixelAt (sub_imgs !! img_idx) x relative_y
 
-concatImages :: Pixel a => Int -> Int -> Int -> [Image a] -> Image a
-concatImages _ _ _ [] = undefined
-concatImages wpixels hpixels side_length (img:imgs) =
-    let sub_width = imageWidth img
-        sub_height = imageHeight img
-        width = side_length * sub_width + wpixels
-        height = side_length * sub_height + hpixels
-    in generateImage (copyPixelFromSubImgs sub_width sub_height side_length (img:imgs)) width height
-
+concatImages :: Pixel a => Int -> Int -> [Image a] -> Image a
+concatImages _ _ [] = undefined
+concatImages extra_pixels num_sub (img:imgs) =
+    let sub_height = imageHeight img
+        width = imageWidth img
+        height = num_sub * sub_height + extra_pixels
+    in generateImage (copyPixelFromSubImgs sub_height num_sub (img:imgs)) width height
 
 sharpenMedianPar :: DynamicImage -> IO ()
 sharpenMedianPar dynamic_img = do
-    putStrLn "Input radius:"
-    radiusstr <- getLine
-    let radius = read radiusstr :: Int
-    putStrLn "Input enhancement factor:"
-    factorstr <- getLine
-    let factor = read factorstr :: Pixel8
+    num_threads <- getInput @Int "number of threads"
 
+    case num_threads of
+        1 -> sharpenMedian dynamic_img
+        _ -> do setNumCapabilities num_threads
+                radius <- getInput @Int "radius"
+                factor <- getInput @Pixel8 "enhancement factor"
 
-    let side_length = 2
-    original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    let sub_imgs = runEval $ splitImage original side_length
-    let sub_blurred = parMap rpar (M.convolute radius) sub_imgs
-    genAndSave_ (sub_blurred !! 0) "img1.png"
-    genAndSave_ (sub_blurred !! 1) "img2.png"
-    genAndSave_ (sub_blurred !! 2) "img3.png"
-    genAndSave_ (sub_blurred !! 3) "img4.png"
+                original <- genAndSave (convertRGB8 dynamic_img) "original.png"
 
-    let wpixels = mod (imageWidth original) side_length
-        hpixels = mod (imageHeight original) side_length
+                let num_sub = num_threads
+                    sub_imgs = runEval $ splitImage original num_sub
+                    sub_blurred = parMap rpar (M.convolute radius) sub_imgs
+                    extra_pixels = mod (imageHeight original) num_sub
 
-    blurred <- genAndSave (concatImages wpixels hpixels side_length sub_blurred) "blurred.png"
-    diff <- genAndSave (subtractImages original blurred) "diff.png"
-    enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
-    genAndSave_ (addImages original enhanced_diff) "final.png"
+                blurred <- genAndSave (concatImages extra_pixels num_sub sub_blurred) "blurred.png"
+                diff <- genAndSave (subtractImages original blurred) "diff.png"
+                enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
+                genAndSave_ (addImages original enhanced_diff) "final.png"
 
 main :: IO ()
 main = do
@@ -120,6 +108,8 @@ main = do
     path <- case args of
             [path_] -> return path_
             _ -> die "Usage: ./hpip <path>"
+
+    -- putStrLn $ "number of cores: " ++ show getNumProcessors
 
     either_img <- readImage path
     case either_img of
