@@ -4,10 +4,10 @@ import Codec.Picture
 import Data.List
 import Utils
 
-getWindowMedian :: Int -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
-getWindowMedian radius img center_x center_y =
+getWindowMedian :: Int -> Int -> Int -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
+getWindowMedian radius sub_idx sub_height img center_x center_y =
     let start_x = center_x - radius
-        start_y = center_y - radius
+        start_y = sub_idx * sub_height + center_y - radius
         side = 2 * radius + 1
     in windowMedian $ go start_x start_y 0 side
     where
@@ -31,8 +31,9 @@ getWindowMedian radius img center_x center_y =
                 mid = 2 * radius * (radius + 1)
             in PixelRGB8 (sorted_rs !! mid) (sorted_gs !! mid) (sorted_bs !! mid)
 
-convolute :: Int -> Image PixelRGB8 -> Image PixelRGB8
-convolute radius img =
+convolute :: Int -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
+convolute radius num_sub img sub_idx =
     let width = imageWidth img
-        height = imageHeight img
-    in generateImage (getWindowMedian radius img) width height
+        extra_pixels = mod (imageHeight img) num_sub
+        height = div (imageHeight img) num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
+    in generateImage (getWindowMedian radius sub_idx height img) width height

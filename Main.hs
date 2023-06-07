@@ -25,23 +25,6 @@ getInput name = do
     putStrLn $ "Input " ++ name ++ ":"
     read <$> getLine
 
-copyPixel :: Pixel a => Int -> Int -> Image a -> Int -> Int -> a
-copyPixel x_offset y_offset img x y = pixelAt img (x_offset + x) (y_offset + y)
-
-splitImage :: Pixel a => Image a -> Int -> Eval [Image a]
-splitImage img num_sub = do
-    let width = imageWidth img
-        height = imageHeight img
-        sub_img_height = div height num_sub
-        -- this is neccassary for cases when image is not divided correctly
-        -- in order to compare it with original later
-        -- im adding extra pixels to subimage in last column
-        extra_pixels = mod height num_sub
-        cpfoo = \sub_idx -> copyPixel 0 (sub_idx * sub_img_height) img
-        sih = \sub_idx -> sub_img_height + (if sub_idx == num_sub - 1 then extra_pixels else 0)
-        generateSubImage = \sub_idx -> generateImage (cpfoo sub_idx) width (sih sub_idx)
-    return $ parMap rpar generateSubImage [sub_idx | sub_idx <- [0 .. num_sub - 1]]
-
 copyPixelFromSubImgs :: Pixel a => Int -> Int -> [Image a] -> Int -> Int -> a
 copyPixelFromSubImgs sub_height num_sub sub_imgs x y =
     let cropped_height = num_sub * sub_height
@@ -68,12 +51,9 @@ medianBlur :: Int -> Image PixelRGB8 -> IO (Image PixelRGB8)
 medianBlur num_threads img = do
     radius <- getInput @Int "radius"
 
-    let blurred = case num_threads of
-            1 -> M.convolute radius img
-            _ -> let sub_imgs = runEval $ splitImage img num_threads
-                     sub_blurred = parMap rpar (M.convolute radius) sub_imgs
-                     extra_pixels = mod (imageHeight img) num_threads
-                 in concatImages extra_pixels num_threads sub_blurred
+    let sub_blurred = parMap rpar (M.convolute radius num_threads img) [0 .. num_threads - 1]
+        extra_pixels = mod (imageHeight img) num_threads
+        blurred = concatImages extra_pixels num_threads sub_blurred 
 
     genAndSave blurred "blurred.png"
 
@@ -110,5 +90,5 @@ main = do
                 "G" -> return gaussianBlur
                 "M" -> return $ medianBlur num_threads
                 _ -> die "No such method"
-            
+
             sharpen dynamic_img method
