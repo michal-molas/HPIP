@@ -23,8 +23,8 @@ safeAdd p1 p2 = if p1 > 255 - p2 then 255 else p1 + p2
 safeSub :: Pixel8 -> Pixel8 -> Pixel8
 safeSub p1 p2 = if p2 > p1 then 0 else p1 - p2
 
-safeMul :: Pixel8 -> Pixel8 -> Pixel8
-safeMul p x = if p > div 255 x then 255 else p * x
+safeMul :: Pixel8 -> Double -> Pixel8
+safeMul p x = let px = x * fromIntegral p in if px > 255.0 then 255 else castToPixel8 px
 
 castToPixel8 :: Double -> Pixel8
 castToPixel8 value = clamp (round value)
@@ -51,5 +51,5 @@ addImages img1 img2 =
                 in PixelRGB8 (safeAdd r r') (safeAdd g g') (safeAdd b b'))
     in generateImage f (imageWidth img1) (imageHeight img1)
 
-enhancePixel :: Pixel8 -> PixelRGB8 -> PixelRGB8
+enhancePixel :: Double -> PixelRGB8 -> PixelRGB8
 enhancePixel x (PixelRGB8 r g b) = PixelRGB8 (safeMul r x) (safeMul g x) (safeMul b x)

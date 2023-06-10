@@ -1,12 +1,17 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+module Main where
+
 import Codec.Picture
+import Codec.Picture.Gif
 import System.Environment (getArgs)
 import System.Exit (die)
 import Control.Parallel.Strategies
-import Control.Concurrent (setNumCapabilities)
--- import GHC.Conc (getNumProcessors)
+import Control.Concurrent (setNumCapabilities, getNumCapabilities)
+import GHC.Conc (getNumProcessors)
+import qualified Data.ByteString as BS
+import Data.List
 
 import qualified Gaussian as G
 import qualified Median as M
@@ -28,7 +33,7 @@ getInput name = do
 copyPixelFromSubImgs :: Pixel a => Int -> Int -> [Image a] -> Int -> Int -> a
 copyPixelFromSubImgs sub_height num_sub sub_imgs x y =
     let cropped_height = num_sub * sub_height
-        -- subimages in last row have extra pixels
+        -- last subimage has extra pixels
         img_idx = div y sub_height - if y >= cropped_height then 1 else 0
         relative_y = mod y sub_height + if y >= cropped_height then sub_height else 0
     in pixelAt (sub_imgs !! img_idx) x relative_y
@@ -41,54 +46,107 @@ concatImages extra_pixels num_sub (img:imgs) =
         height = num_sub * sub_height + extra_pixels
     in generateImage (copyPixelFromSubImgs sub_height num_sub (img:imgs)) width height
 
-gaussianBlur :: Image PixelRGB8 -> IO (Image PixelRGB8)
-gaussianBlur img = do
-    sigma <- getInput @Double "sigma"
+gaussianBlur :: Double -> Image PixelRGB8 -> Image PixelRGB8
+gaussianBlur = G.convolute
 
-    genAndSave (G.convolute sigma img) "blurred.png"
-
-medianBlur :: Int -> Image PixelRGB8 -> IO (Image PixelRGB8)
-medianBlur num_threads img = do
-    radius <- getInput @Int "radius"
-
-    let sub_blurred = parMap rpar (M.convolute radius num_threads img) [0 .. num_threads - 1]
+medianBlur :: Int -> Int -> Image PixelRGB8 -> Image PixelRGB8
+medianBlur radius 1 img = M.convolute radius 1 img 0
+medianBlur radius num_threads img =
+    let sub_blurred = parMap rseq (M.convolute radius num_threads img) [0 .. num_threads - 1]
         extra_pixels = mod (imageHeight img) num_threads
-        blurred = concatImages extra_pixels num_threads sub_blurred 
+    in concatImages extra_pixels num_threads sub_blurred
 
-    genAndSave blurred "blurred.png"
+sharpenVerbose :: Double -> (Image PixelRGB8 -> Image PixelRGB8) -> Image PixelRGB8 -> IO ()
+sharpenVerbose factor blur_method img = do
+    genAndSave_ img "original.png"
+    blurred <- genAndSave (blur_method img) "blurred.png"
+    diff <- genAndSave (subtractImages img blurred) "diff.png"
+    enhanced_diff <- genAndSave (if factor == 1.0 then diff else pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
+    genAndSave_ (addImages img enhanced_diff) "final.png"
 
-sharpen :: DynamicImage -> (Image PixelRGB8 -> IO (Image PixelRGB8)) -> IO ()
-sharpen dynamic_img blur_method = do
-    original <- genAndSave (convertRGB8 dynamic_img) "original.png"
-    blurred <- blur_method original
-    diff <- genAndSave (subtractImages original blurred) "diff.png"
+sharpen :: Double -> (Image PixelRGB8 -> Image PixelRGB8) -> Image PixelRGB8 -> Image PixelRGB8
+sharpen factor blur_method img =
+    let blurred = blur_method img
+        diff = subtractImages img blurred
+        enhanced_diff = if factor == 1.0 then diff else pixelMap (enhancePixel factor) diff
+        in addImages img enhanced_diff
 
-    factor <- getInput @Pixel8 "enhancement factor"
+sharpenChunk :: Double -> (Image PixelRGB8 -> Image PixelRGB8) -> [Image PixelRGB8] -> [Image PixelRGB8]
+sharpenChunk factor blur_method = map (sharpen factor blur_method)
 
-    enhanced_diff <- genAndSave (pixelMap (enhancePixel factor) diff) "enhanced_diff.png"
-    genAndSave_ (addImages original enhanced_diff) "final.png"
+
+isGif :: [String] -> Bool
+isGif [] = undefined
+isGif (path:args) = elem "--gif" args || isSuffixOf ".gif" path
+
+splitIntoParts :: Int -> [a] -> [[a]]
+splitIntoParts 1 xs = [xs]
+splitIntoParts n xs = take first_length xs : splitIntoParts (n - 1) (drop first_length xs)
+  where
+    total_length = length xs
+    first_length = total_length `div` n + if total_length `mod` n > 0 then 1 else 0
+
+
+mainGif :: String -> IO ()
+mainGif path = do
+    gif_bs <- BS.readFile path
+    either_img <- readGifImages path
+    case either_img of
+        Left s -> die s
+        Right dynamic_imgs -> do
+            num_threads <- getNumCapabilities
+
+            factor <- getInput @Double "enhancement factor"
+            sigma <- getInput @Double "sigma"
+
+            let imgs = map convertRGB8 dynamic_imgs
+                imgs_chunks = splitIntoParts num_threads imgs
+                sharp_imgs_chunks = parMap rdeepseq (sharpenChunk factor (gaussianBlur sigma)) imgs_chunks
+                sharp_imgs = concat sharp_imgs_chunks
+
+            case getDelaysGifImages gif_bs of
+                Left s -> die s
+                Right delays -> do
+                    case writeGifAnimation "images/final.gif" (head delays) LoopingForever sharp_imgs of
+                        Left s -> die s
+                        Right a -> a
+
+mainImg :: String -> Bool -> IO ()
+mainImg path verbose = do
+    either_img <- readImage path
+    case either_img of
+        Left s -> die s
+        Right dynamic_img -> do
+            let img = convertRGB8 dynamic_img
+
+            putStrLn "G — Gaussian kernel"
+            putStrLn "M — Median filter"
+            putStrLn "Choose method:"
+            flag <- getLine
+
+            num_threads <- getNumCapabilities
+
+            factor <- getInput @Double "enhancement factor"
+            method <- case flag of
+                    "G" -> do
+                        sigma <- getInput @Double "sigma"
+                        return $ gaussianBlur sigma
+                    "M" -> do
+                        radius <- getInput @Int "radius"
+                        return $ medianBlur radius num_threads
+                    _ -> return id
+
+            if verbose
+                then sharpenVerbose factor method img
+                else genAndSave_ (sharpen factor method img) "final.png"
 
 main :: IO ()
 main = do
     args <- System.Environment.getArgs
     path <- case args of
-            [path_] -> return path_
+            (path_:_) -> return path_
             _ -> die "Usage: ./hpip <path>"
 
-    either_img <- readImage path
-    case either_img of
-        Left s -> die s
-        Right dynamic_img -> do
-            putStrLn "G — Gaussian kernel"
-            putStrLn "M — Median filter"
-            putStrLn "Choose method:"
-            flag <- getLine
-            num_threads <- getInput @Int "number of threads"
-            setNumCapabilities num_threads
-
-            method <- case flag of
-                "G" -> return gaussianBlur
-                "M" -> return $ medianBlur num_threads
-                _ -> die "No such method"
-
-            sharpen dynamic_img method
+    if isGif args
+        then mainGif path
+        else mainImg path ("--verbose" `elem` args)
