@@ -97,11 +97,12 @@ mainGif path = do
             num_threads <- getNumCapabilities
 
             factor <- getInput @Double "enhancement factor"
-            sigma <- getInput @Double "sigma"
+            -- sigma <- getInput @Double "sigma"
+            radius <- getInput @Int "radius"
 
             let imgs = map convertRGB8 dynamic_imgs
                 imgs_chunks = splitIntoParts num_threads imgs
-                sharp_imgs_chunks = parMap rdeepseq (sharpenChunk factor (gaussianBlur sigma)) imgs_chunks
+                sharp_imgs_chunks = parMap rdeepseq (sharpenChunk factor (medianBlur radius 1)) imgs_chunks
                 sharp_imgs = concat sharp_imgs_chunks
 
             case getDelaysGifImages gif_bs of

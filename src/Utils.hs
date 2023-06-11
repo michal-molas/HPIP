@@ -8,15 +8,6 @@ adjustIdx max_border idx
     | idx >= max_border = max_border - 1
     | otherwise = idx
 
-defaultPixelAt :: Pixel a => a -> Image a -> Int -> Int -> a
-defaultPixelAt default_px img x y =
-    let width = imageWidth img
-        height = imageHeight img
-            in
-                if x < width && x >= 0 && y < height && y >= 0
-                    then pixelAt img x y
-                    else default_px
-
 safeAdd :: Pixel8 -> Pixel8 -> Pixel8
 safeAdd p1 p2 = if p1 > 255 - p2 then 255 else p1 + p2
 

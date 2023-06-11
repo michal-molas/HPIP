@@ -22,7 +22,9 @@ gaussianKernel sigma =
 convoluteHorizontalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
 convoluteHorizontalHelp [] _ _ _ = (0.0, 0.0, 0.0)
 convoluteHorizontalHelp (a:gauss) img x y =
-    let PixelRGB8 r g b = defaultPixelAt (PixelRGB8 0 0 0) img x y
+    let width = imageWidth img
+        height = imageHeight img
+        PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
         (r', g', b') = convoluteHorizontalHelp gauss img (x + 1) y
     in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
 
@@ -35,7 +37,9 @@ convoluteHorizontal gauss_size gauss img x y =
 convoluteVerticalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
 convoluteVerticalHelp [] _ _ _ = (0.0, 0.0, 0.0)
 convoluteVerticalHelp (a:gauss) img x y =
-    let PixelRGB8 r g b = defaultPixelAt (PixelRGB8 0 0 0) img x y
+    let width = imageWidth img
+        height = imageHeight img
+        PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
         (r', g', b') = convoluteVerticalHelp gauss img x (y + 1)
     in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
 
