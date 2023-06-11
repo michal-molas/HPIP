@@ -19,40 +19,6 @@ gaussianKernel sigma =
                     coefficient = 1 / (sigma * sqrt (2 * pi))
                 in ((coefficient * exp expo):go (idx + 1) size)
 
-convoluteHorizontalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
-convoluteHorizontalHelp [] _ _ _ = (0.0, 0.0, 0.0)
-convoluteHorizontalHelp (a:kernel) img x y =
-    let width = imageWidth img
-        height = imageHeight img
-        PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
-        (r', g', b') = convoluteHorizontalHelp kernel img (x + 1) y
-    in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
-
-convolutePixelHorizontal :: Int -> [Double] -> Int -> Int -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
-convolutePixelHorizontal kernel_size kernel sub_idx sub_height img x y =
-    let center = div (kernel_size - 1) 2
-        x_ = x - center
-        y_ = sub_idx * sub_height + y
-        (r, g, b) = convoluteHorizontalHelp kernel img x_ y_
-    in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
-
-convoluteVerticalHelp :: [Double] -> Image PixelRGB8 -> Int -> Int -> (Double, Double, Double)
-convoluteVerticalHelp [] _ _ _ = (0.0, 0.0, 0.0)
-convoluteVerticalHelp (a:kernel) img x y =
-    let width = imageWidth img
-        height = imageHeight img
-        PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
-        (r', g', b') = convoluteVerticalHelp kernel img x (y + 1)
-    in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
-
-convolutePixelVertical :: Int -> [Double] -> Int -> Int -> Image PixelRGB8 -> Int -> Int -> PixelRGB8
-convolutePixelVertical kernel_size kernel sub_idx sub_height img x y =
-    let center = div (kernel_size - 1) 2
-        x_ = x
-        y_ = sub_idx * sub_height + y - center
-        (r, g, b) = convoluteVerticalHelp kernel img x_ y_
-    in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
-
 convoluteHorizontal :: Double -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
 convoluteHorizontal sigma num_sub img sub_idx =
     let width = imageWidth img
@@ -62,7 +28,24 @@ convoluteHorizontal sigma num_sub img sub_idx =
         
         kernel = gaussianKernel sigma
         kernel_size = length kernel
-    in generateImage (convolutePixelHorizontal kernel_size kernel sub_idx sub_height img) width sub_height
+    in generateImage (convolutePixel kernel_size kernel sub_height) width sub_height
+    where
+        convolutePixel :: Int -> [Double] -> Int -> Int -> Int -> PixelRGB8
+        convolutePixel kernel_size kernel sub_height x y =
+            let center = div (kernel_size - 1) 2
+                x_ = x - center
+                y_ = sub_idx * sub_height + y
+                (r, g, b) = convolutePixelHelp kernel x_ y_
+            in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
+
+        convolutePixelHelp :: [Double] -> Int -> Int -> (Double, Double, Double)
+        convolutePixelHelp [] _ _ = (0.0, 0.0, 0.0)
+        convolutePixelHelp (a:kernel) x y =
+            let width = imageWidth img
+                height = imageHeight img
+                PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
+                (r', g', b') = convolutePixelHelp kernel (x + 1) y
+            in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
 
 convoluteVertical :: Double -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
 convoluteVertical sigma num_sub img sub_idx =
@@ -73,4 +56,22 @@ convoluteVertical sigma num_sub img sub_idx =
         
         kernel = gaussianKernel sigma
         kernel_size = length kernel
-    in generateImage (convolutePixelVertical kernel_size kernel sub_idx sub_height img) width sub_height
+    in generateImage (convolutePixel kernel_size kernel sub_height) width sub_height
+    where
+        convolutePixel :: Int -> [Double] -> Int -> Int -> Int -> PixelRGB8
+        convolutePixel kernel_size kernel sub_height x y =
+            let center = div (kernel_size - 1) 2
+                x_ = x
+                y_ = sub_idx * sub_height + y - center
+                (r, g, b) = convolutePixelHelp kernel x_ y_
+            in PixelRGB8 (castToPixel8 r) (castToPixel8 g) (castToPixel8 b)
+
+        convolutePixelHelp :: [Double] -> Int -> Int -> (Double, Double, Double)
+        convolutePixelHelp [] _ _ = (0.0, 0.0, 0.0)
+        convolutePixelHelp (a:kernel) x y =
+            let width = imageWidth img
+                height = imageHeight img
+                PixelRGB8 r g b = pixelAt img (adjustIdx width x) (adjustIdx height y)
+                (r', g', b') = convolutePixelHelp kernel x (y + 1)
+            in (a * fromIntegral r + r', a * fromIntegral g + g', a * fromIntegral b + b')
+        
