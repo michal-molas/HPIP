@@ -23,12 +23,12 @@ convoluteHorizontal :: Double -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB
 convoluteHorizontal sigma num_sub img sub_idx =
     let width = imageWidth img
         height = imageHeight img
-        extra_pixels = mod height num_sub
-        sub_height = div height num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
+        extra_pixels = if sub_idx == num_sub - 1 then mod height num_sub else 0
+        sub_height = div height num_sub
         
         kernel = gaussianKernel sigma
         kernel_size = length kernel
-    in generateImage (convolutePixel kernel_size kernel sub_height) width sub_height
+    in generateImage (convolutePixel kernel_size kernel sub_height) width (sub_height + extra_pixels)
     where
         convolutePixel :: Int -> [Double] -> Int -> Int -> Int -> PixelRGB8
         convolutePixel kernel_size kernel sub_height x y =
@@ -51,12 +51,12 @@ convoluteVertical :: Double -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
 convoluteVertical sigma num_sub img sub_idx =
     let width = imageWidth img
         height = imageHeight img
-        extra_pixels = mod height num_sub
-        sub_height = div height num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
+        extra_pixels = if sub_idx == num_sub - 1 then mod height num_sub else 0
+        sub_height = div height num_sub
         
         kernel = gaussianKernel sigma
         kernel_size = length kernel
-    in generateImage (convolutePixel kernel_size kernel sub_height) width sub_height
+    in generateImage (convolutePixel kernel_size kernel sub_height) width (sub_height + extra_pixels)
     where
         convolutePixel :: Int -> [Double] -> Int -> Int -> Int -> PixelRGB8
         convolutePixel kernel_size kernel sub_height x y =
