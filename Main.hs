@@ -64,21 +64,9 @@ sharpen factor blur_method img =
         enhanced_diff = if factor == 1.0 then diff else pixelMap (enhancePixel factor) diff
         in addImages img enhanced_diff
 
-sharpenChunk :: Double -> (Image PixelRGB8 -> Image PixelRGB8) -> [Image PixelRGB8] -> [Image PixelRGB8]
-sharpenChunk factor blur_method = map (sharpen factor blur_method)
-
-
 isGif :: [String] -> Bool
 isGif [] = undefined
 isGif (path:args) = elem "--gif" args || isSuffixOf ".gif" path
-
-splitIntoParts :: Int -> [a] -> [[a]]
-splitIntoParts 1 xs = [xs]
-splitIntoParts n xs = take first_length xs : splitIntoParts (n - 1) (drop first_length xs)
-  where
-    total_length = length xs
-    first_length = total_length `div` n + if total_length `mod` n > 0 then 1 else 0
-
 
 mainGif :: String -> String -> IO ()
 mainGif path flag = do
@@ -87,8 +75,6 @@ mainGif path flag = do
     case either_img of
         Left s -> die s
         Right dynamic_imgs -> do
-            num_threads <- getNumCapabilities
-
             factor <- getInput @Double "enhancement factor"
 
             blur_method <- case flag of
@@ -100,10 +86,7 @@ mainGif path flag = do
                         return $ medianBlur radius 1
                     _ -> die "No such method"
 
-            let imgs = map convertRGB8 dynamic_imgs
-                imgs_chunks = splitIntoParts num_threads imgs
-                sharp_imgs_chunks = parMap rdeepseq (sharpenChunk factor blur_method) imgs_chunks
-                sharp_imgs = concat sharp_imgs_chunks
+            let sharp_imgs = parMap rseq (sharpen factor blur_method) (map convertRGB8 dynamic_imgs)
 
             case getDelaysGifImages gif_bs of
                 Left s -> die s
