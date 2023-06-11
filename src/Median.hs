@@ -34,6 +34,7 @@ getWindowMedian radius sub_idx sub_height img center_x center_y =
 convolute :: Int -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
 convolute radius num_sub img sub_idx =
     let width = imageWidth img
-        extra_pixels = mod (imageHeight img) num_sub
-        height = div (imageHeight img) num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
-    in generateImage (getWindowMedian radius sub_idx height img) width height
+        height = imageHeight img
+        extra_pixels = mod height num_sub
+        sub_height = div height num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
+    in generateImage (getWindowMedian radius sub_idx height img) width sub_height

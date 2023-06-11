@@ -44,3 +44,19 @@ addImages img1 img2 =
 
 enhancePixel :: Double -> PixelRGB8 -> PixelRGB8
 enhancePixel x (PixelRGB8 r g b) = PixelRGB8 (safeMul r x) (safeMul g x) (safeMul b x)
+
+concatImages :: Pixel a => Int -> Int -> [Image a] -> Image a
+concatImages _ _ [] = undefined
+concatImages extra_pixels num_sub (img:imgs) =
+    let sub_height = imageHeight img
+        width = imageWidth img
+        height = num_sub * sub_height + extra_pixels
+    in generateImage (copyPixelFromSubImgs sub_height num_sub (img:imgs)) width height
+
+copyPixelFromSubImgs :: Pixel a => Int -> Int -> [Image a] -> Int -> Int -> a
+copyPixelFromSubImgs sub_height num_sub sub_imgs x y =
+    let cropped_height = num_sub * sub_height
+        -- last subimage has extra pixels
+        img_idx = div y sub_height - if y >= cropped_height then 1 else 0
+        relative_y = mod y sub_height + if y >= cropped_height then sub_height else 0
+    in pixelAt (sub_imgs !! img_idx) x relative_y
