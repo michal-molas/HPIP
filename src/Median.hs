@@ -35,6 +35,6 @@ convolute :: Int -> Int -> Image PixelRGB8 -> Int -> Image PixelRGB8
 convolute radius num_sub img sub_idx =
     let width = imageWidth img
         height = imageHeight img
-        extra_pixels = mod height num_sub
-        sub_height = div height num_sub + if sub_idx == num_sub - 1 then extra_pixels else 0
-    in generateImage (getWindowMedian radius sub_idx height img) width sub_height
+        extra_pixels = if sub_idx == num_sub - 1 then mod height num_sub else 0
+        sub_height = div height num_sub
+    in generateImage (getWindowMedian radius sub_idx sub_height img) width (sub_height + extra_pixels)
